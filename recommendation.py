@@ -4,6 +4,8 @@ from pymongo import MongoClient
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import os
+from apscheduler.schedulers.background import BackgroundScheduler
+import time
 
 # Function to get video index from video data
 def get_video_index(video_data, video_id):
@@ -59,19 +61,25 @@ client = MongoClient(mongo_uri)
 db = client[mongo_db]
 videos_collection = db['videos']
 
-# Fetch video data
+# Fetch video data with polling
 video_data = list(videos_collection.find())
+while not video_data:
+    print("No videos found in the database. Polling again in 5 seconds...")
+    time.sleep(5)
+    video_data = list(videos_collection.find())
 
-# Create a dictionary to store user ratings
+# Create a dictionary to store user ratings with polling
 user_ratings = {}
-
-# Populate the user ratings dictionary
-for video in video_data:
-    video_id = str(video['_id'])  # Convert ObjectId to string
-    ratings = video.get('userRatings', [])
-    for rating in ratings:
-        user_id = str(rating['user'])  # Convert ObjectId to string
-        user_ratings.setdefault(user_id, []).append({'video_id': video_id, 'rating': rating['rating']})
+while not user_ratings:
+    print("No user ratings found in the database. Polling again in 5 seconds...")
+    time.sleep(5)
+    video_data = list(videos_collection.find())
+    for video in video_data:
+        video_id = str(video['_id'])  # Convert ObjectId to string
+        ratings = video.get('userRatings', [])
+        for rating in ratings:
+            user_id = str(rating['user'])  # Convert ObjectId to string
+            user_ratings.setdefault(user_id, []).append({'video_id': video_id, 'rating': rating['rating']})
 
 # Create a user-item matrix
 user_item_matrix = np.zeros((len(user_ratings), len(video_data)))
@@ -84,6 +92,48 @@ for i, (user_id, ratings) in enumerate(user_ratings.items()):
 
 # Calculate cosine similarity between users
 user_similarity_matrix = cosine_similarity(user_item_matrix)
+
+# Function to refresh video/user data and retrain the model
+def refresh_data_and_retrain():
+    global video_data, user_ratings, user_item_matrix, user_similarity_matrix
+
+    # Fetch updated video data with polling
+    video_data = list(videos_collection.find())
+    while not video_data:
+        print("No videos found in the database. Polling again in 5 seconds...")
+        time.sleep(5)
+        video_data = list(videos_collection.find())
+
+    # Reset user_ratings dictionary with polling
+    user_ratings = {}
+    while not user_ratings:
+        print("No user ratings found in the database. Polling again in 5 seconds...")
+        time.sleep(5)
+        video_data = list(videos_collection.find())
+        for video in video_data:
+            video_id = str(video['_id'])  # Convert ObjectId to string
+            ratings = video.get('userRatings', [])
+            for rating in ratings:
+                user_id = str(rating['user'])  # Convert ObjectId to string
+                user_ratings.setdefault(user_id, []).append({'video_id': video_id, 'rating': rating['rating']})
+
+    # Reset and recompute the user-item matrix
+    user_item_matrix = np.zeros((len(user_ratings), len(video_data)))
+
+    # Populate the matrix with updated user ratings
+    for i, (user_id, ratings) in enumerate(user_ratings.items()):
+        for rating in ratings:
+            video_index = get_video_index(video_data, rating['video_id'])
+            user_item_matrix[i, video_index] = rating['rating']
+
+    # Recalculate cosine similarity between users
+    user_similarity_matrix = cosine_similarity(user_item_matrix)
+    print("Data refreshed and model retrained successfully.")
+
+# Set up a scheduler to periodically refresh data and retrain the model
+scheduler = BackgroundScheduler()
+scheduler.add_job(refresh_data_and_retrain, trigger='interval', hours=24)  # Adjust the interval as needed
+scheduler.start()
 
 # Flask route to handle recommendations
 @app.route('/recommendations', methods=['POST'])
