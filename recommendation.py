@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from pymongo import MongoClient
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+import os
 
 # Function to get video index from video data
 def get_video_index(video_data, video_id):
@@ -43,9 +44,15 @@ def get_user_index(user_ratings, user_id):
 
 app = Flask(__name__)
 
+# Get MongoDB connection details from environment variables
+mongo_host = os.environ.get('MONGO_HOST', 'localhost')
+mongo_port = int(os.environ.get('MONGO_PORT', 27017))
+mongo_db = os.environ.get('MONGO_DB', 'your_database')
+
 # Connect to MongoDB
-client = MongoClient('mongodb://localhost:7000/')
-db = client['videocatalog']
+mongo_uri = f'mongodb://{mongo_host}:{mongo_port}/{mongo_db}'
+client = MongoClient(mongo_uri)
+db = client[mongo_db]
 videos_collection = db['videos']
 
 # Fetch video data
@@ -87,5 +94,5 @@ def recommend_videos():
         return jsonify({'error': 'User ID not provided'}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True, port=8000)
+    app.run(debug=True, port=5002)
 
