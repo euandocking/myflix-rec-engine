@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from pymongo import MongoClient
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -15,6 +16,7 @@ def get_video_index(video_data, video_id):
 def get_recommendations(user_id, user_similarity_matrix, user_item_matrix, video_data, num_recommendations=10):
     user_index = get_user_index(user_ratings, user_id)
     if user_index == -1:
+        print(f"User {user_id} not found.")
         return []
 
     # Find similar users
@@ -31,6 +33,7 @@ def get_recommendations(user_id, user_similarity_matrix, user_item_matrix, video
         for video in unrated_videos:
             recommendations.append(str(video_data[video]['_id']))  # Remove ['_id']['$oid']
             if len(recommendations) == num_recommendations:
+                print("Recommendations generated successfully.")
                 return recommendations
 
     return recommendations
@@ -43,11 +46,12 @@ def get_user_index(user_ratings, user_id):
     return -1
 
 app = Flask(__name__)
+CORS(app)
 
 # Get MongoDB connection details from environment variables
-mongo_host = os.environ.get('MONGO_HOST', 'localhost')
+mongo_host = os.environ.get('MONGO_HOST', 'myflix-mongo')
 mongo_port = int(os.environ.get('MONGO_PORT', 27017))
-mongo_db = os.environ.get('MONGO_DB', 'your_database')
+mongo_db = os.environ.get('MONGO_DB', 'videocatalog')
 
 # Connect to MongoDB
 mongo_uri = f'mongodb://{mongo_host}:{mongo_port}/{mongo_db}'
@@ -91,8 +95,8 @@ def recommend_videos():
         recommendations = get_recommendations(user_id, user_similarity_matrix, user_item_matrix, video_data, num_recommendations=10)
         return jsonify({'recommendations': recommendations})
     else:
+        print("User ID not provided.")
         return jsonify({'error': 'User ID not provided'}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5002)
-
+    app.run(host="0.0.0.0", debug=True, port=5002)
