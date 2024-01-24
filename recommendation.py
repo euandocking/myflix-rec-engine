@@ -33,7 +33,7 @@ def get_recommendations(user_id, user_similarity_matrix, user_item_matrix, video
         unrated_videos = np.where(user_item_matrix[user_index] == 0)[0]
         unrated_videos = np.setdiff1d(unrated_videos, rated_videos)  # Exclude already rated videos
         for video in unrated_videos:
-            recommendations.append(str(video_data[video]['_id']))  # Remove ['_id']['$oid']
+            recommendations.append(str(video_data[video]['_id']))
             if len(recommendations) == num_recommendations:
                 print("Recommendations generated successfully.")
                 return recommendations
